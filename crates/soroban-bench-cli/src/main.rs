@@ -87,6 +87,10 @@ enum Commands {
         /// Maximum allowed percentage regression before erroring (default 5.0%)
         #[arg(short, long, default_value_t = 5.0)]
         threshold: f64,
+
+        /// Output format (text or markdown for PR comments)
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Export benchmark workload as a soroban-testkit property test harness
@@ -109,6 +113,24 @@ enum Commands {
         #[arg(long, default_value = ".benchmarks/history.json")]
         store: PathBuf,
     },
+}
+
+fn parse_metrics_file(content: &str) -> Result<BenchmarkMetrics> {
+    if let Ok(m) = serde_json::from_str::<BenchmarkMetrics>(content) {
+        return Ok(m);
+    }
+    let list: Vec<BenchmarkMetrics> = serde_json::from_str(content)?;
+    let mut agg = BenchmarkMetrics::default();
+    for m in list {
+        agg.cpu_instructions += m.cpu_instructions;
+        agg.memory_bytes += m.memory_bytes;
+        agg.ledger_read_entries += m.ledger_read_entries;
+        agg.ledger_write_entries += m.ledger_write_entries;
+        agg.ledger_read_bytes += m.ledger_read_bytes;
+        agg.ledger_write_bytes += m.ledger_write_bytes;
+        agg.estimated_fee_stroops += m.estimated_fee_stroops;
+    }
+    Ok(agg)
 }
 
 fn print_gas_node(node: &ContractGasNode, root_total: u64) {
@@ -421,28 +443,81 @@ fn main() -> Result<()> {
             baseline,
             current,
             threshold,
+            format,
         } => {
             let b_content = std::fs::read_to_string(&baseline)?;
             let c_content = std::fs::read_to_string(&current)?;
 
-            let b_metrics: BenchmarkMetrics = serde_json::from_str(&b_content)?;
-            let c_metrics: BenchmarkMetrics = serde_json::from_str(&c_content)?;
+            let b_metrics = parse_metrics_file(&b_content)?;
+            let c_metrics = parse_metrics_file(&c_content)?;
 
             let diff = c_metrics.diff(&b_metrics);
+            let exceeds = diff.exceeds_threshold(threshold);
 
-            println!("{}", "=== Soroban Gas & Resource Diff ===".bold().cyan());
-            println!("  CPU Instructions: {:+.2}%", diff.cpu_instructions_pct);
-            println!("  Memory Bytes:     {:+.2}%", diff.memory_bytes_pct);
-            println!("  Storage Read:     {:+.2}%", diff.read_bytes_pct);
-            println!("  Storage Write:    {:+.2}%", diff.write_bytes_pct);
-            println!();
+            if format.to_lowercase() == "markdown" || format.to_lowercase() == "pr-comment" {
+                println!("## 📊 Soroban Gas Regression Gate Report\n");
+                println!("| Resource Metric | Baseline | Current | Drift (%) | Status |");
+                println!("|---|---|---|---|---|");
+                println!(
+                    "| CPU Instructions | {} | {} | {:+.2}% | {} |",
+                    b_metrics.cpu_instructions,
+                    c_metrics.cpu_instructions,
+                    diff.cpu_instructions_pct,
+                    if diff.cpu_instructions_pct > threshold {
+                        "❌ REGRESSION"
+                    } else {
+                        "✅ PASS"
+                    }
+                );
+                println!(
+                    "| Memory Allocated | {} B | {} B | {:+.2}% | {} |",
+                    b_metrics.memory_bytes,
+                    c_metrics.memory_bytes,
+                    diff.memory_bytes_pct,
+                    if diff.memory_bytes_pct > threshold {
+                        "❌ REGRESSION"
+                    } else {
+                        "✅ PASS"
+                    }
+                );
+                println!(
+                    "| Ledger Read Bytes | {} B | {} B | {:+.2}% | {} |",
+                    b_metrics.ledger_read_bytes,
+                    c_metrics.ledger_read_bytes,
+                    diff.read_bytes_pct,
+                    if diff.read_bytes_pct > threshold {
+                        "❌ REGRESSION"
+                    } else {
+                        "✅ PASS"
+                    }
+                );
+                println!(
+                    "| Ledger Write Bytes | {} B | {} B | {:+.2}% | {} |",
+                    b_metrics.ledger_write_bytes,
+                    c_metrics.ledger_write_bytes,
+                    diff.write_bytes_pct,
+                    if diff.write_bytes_pct > threshold {
+                        "❌ REGRESSION"
+                    } else {
+                        "✅ PASS"
+                    }
+                );
+                println!();
+            } else {
+                println!("{}", "=== Soroban Gas & Resource Diff ===".bold().cyan());
+                println!("  CPU Instructions: {:+.2}%", diff.cpu_instructions_pct);
+                println!("  Memory Bytes:     {:+.2}%", diff.memory_bytes_pct);
+                println!("  Storage Read:     {:+.2}%", diff.read_bytes_pct);
+                println!("  Storage Write:    {:+.2}%", diff.write_bytes_pct);
+                println!();
+            }
 
-            if diff.exceeds_threshold(threshold) {
+            if exceeds {
                 anyhow::bail!(
                     "Regression threshold ({:.1}%) exceeded! Review performance baseline.",
                     threshold
                 );
-            } else {
+            } else if format.to_lowercase() != "markdown" && format.to_lowercase() != "pr-comment" {
                 println!(
                     "{}",
                     "✔ Performance within baseline regression tolerance."
