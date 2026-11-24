@@ -1,0 +1,12 @@
+[book]
+authors = ["Stellar Crucible Team"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Soroban Bench Documentation"
+
+[output.html]
+git-repository-url = "https://github.com/stellar-crucible/soroban-bench"
+edit-url-template = "https://github.com/stellar-crucible/soroban-bench/edit/main/docs/{path}"
+site-url = "/soroban-bench/"
+cname = ""

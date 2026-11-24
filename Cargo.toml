@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/soroban-bench-core",
+    "crates/soroban-bench-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Stellar Crucible"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/stellar-crucible/soroban-bench"
+homepage = "https://stellar-crucible.github.io/soroban-bench/"
+documentation = "https://docs.rs/soroban-bench-core"
+readme = "README.md"
+rust-version = "1.85.0"
+keywords = ["stellar", "soroban", "benchmark", "performance", "gas-profiling"]
+categories = ["cryptography::cryptocurrencies", "development-tools"]
+
+[workspace.dependencies]
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+clap = { version = "4.5.31", features = ["derive"] }
+colored = "3.0.0"
+thiserror = "2.0.12"
+anyhow = "1.0"
+toml = "0.8"

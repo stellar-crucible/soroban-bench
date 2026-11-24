@@ -1,0 +1,20 @@
+[package]
+name = "soroban-bench-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI tool for continuous macro-benchmarking and rent simulation on Soroban"
+
+[[bin]]
+name = "soroban-bench"
+path = "src/main.rs"
+
+[dependencies]
+soroban-bench-core = { path = "../soroban-bench-core" }
+clap.workspace = true
+colored.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+toml.workspace = true

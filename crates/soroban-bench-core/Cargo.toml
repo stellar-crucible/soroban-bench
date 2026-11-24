@@ -1,0 +1,15 @@
+[package]
+name = "soroban-bench-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Core macro-benchmarking and storage rent calculation engine for Soroban"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
