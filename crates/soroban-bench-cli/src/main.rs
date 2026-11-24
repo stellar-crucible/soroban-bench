@@ -180,16 +180,10 @@ fn main() -> Result<()> {
             println!();
 
             if diff.exceeds_threshold(threshold) {
-                println!(
-                    "{}",
-                    format!(
-                        "✖ Regression threshold ({:.1}%) exceeded! Review performance baseline.",
-                        threshold
-                    )
-                    .red()
-                    .bold()
+                anyhow::bail!(
+                    "Regression threshold ({:.1}%) exceeded! Review performance baseline.",
+                    threshold
                 );
-                std::process::exit(1);
             } else {
                 println!(
                     "{}",
