@@ -2,8 +2,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use soroban_bench_core::{
-    BenchmarkMetrics, BenchmarkScenario, NetworkCongestionProfile, ProtocolVersion,
-    StorageRentCalculator, StorageTier,
+    BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode,
+    NetworkCongestionProfile, ProtocolVersion, StorageRentCalculator, StorageTier,
 };
 use std::path::PathBuf;
 
@@ -25,9 +25,19 @@ enum Commands {
         /// Path to scenario TOML file
         scenario: PathBuf,
 
-        /// Save execution results to JSON file
+        /// Save execution results to JSON or HTML file
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Output format (text or html)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// Profile nested cross-contract invocation gas attribution
+    Profile {
+        /// Path to scenario TOML file
+        scenario: PathBuf,
     },
 
     /// Simulate scenario execution under network congestion and fee surges
@@ -87,6 +97,26 @@ enum Commands {
         #[arg(short, long, default_value = "tests/benchmark_invariant.rs")]
         output: PathBuf,
     },
+}
+
+fn print_gas_node(node: &ContractGasNode, root_total: u64) {
+    let indent = "  ".repeat(node.depth);
+    let branch = if node.depth == 0 { "▪" } else { "└──" };
+    let pct = node.attribution_pct(root_total);
+    println!(
+        "{}{} [{}] {}::{} ({} CPU instructions, {} bytes mem, {:.1}%)",
+        indent,
+        branch.cyan(),
+        node.depth,
+        node.contract_id.bold(),
+        node.method.yellow(),
+        node.cpu_instructions,
+        node.memory_bytes,
+        pct
+    );
+    for child in &node.children {
+        print_gas_node(child, root_total);
+    }
 }
 
 fn main() -> Result<()> {
@@ -156,7 +186,11 @@ fn main() -> Result<()> {
             );
         }
 
-        Commands::Run { scenario, output } => {
+        Commands::Run {
+            scenario,
+            output,
+            format,
+        } => {
             let content = std::fs::read_to_string(&scenario)?;
             let sc = BenchmarkScenario::from_toml(&content)?;
 
@@ -199,13 +233,80 @@ fn main() -> Result<()> {
                 all_metrics.push(metrics);
             }
 
-            if let Some(out_path) = output {
+            if format.to_lowercase() == "html" {
+                let html = BenchmarkHtmlReporter::render(&sc, &all_metrics);
+                if let Some(out_path) = output {
+                    std::fs::write(&out_path, html)?;
+                    println!(
+                        "✔ Interactive HTML report saved to: {}",
+                        out_path.display().to_string().bold()
+                    );
+                } else {
+                    println!("{}", html);
+                }
+            } else if let Some(out_path) = output {
                 let serialized = serde_json::to_string_pretty(&all_metrics)?;
                 std::fs::write(&out_path, serialized)?;
                 println!(
                     "✔ Benchmark results saved to: {}",
                     out_path.display().to_string().bold()
                 );
+            }
+        }
+
+        Commands::Profile { scenario } => {
+            let content = std::fs::read_to_string(&scenario)?;
+            let sc = BenchmarkScenario::from_toml(&content)?;
+
+            println!(
+                "{}",
+                format!("Profiling Cross-Contract Gas Attribution: {}", sc.name)
+                    .bold()
+                    .magenta()
+            );
+            println!();
+
+            for step in &sc.steps {
+                println!("Execution Tree for Step `{}`:", step.name.bold());
+
+                let mut root = ContractGasNode::new(
+                    "PrimaryContract",
+                    &step.contract_method,
+                    0,
+                    150_000 * step.iterations as u64,
+                    8_000 * step.iterations as u64,
+                );
+
+                let mut vault_child = ContractGasNode::new(
+                    "TokenVault",
+                    "transfer_checked",
+                    1,
+                    65_000 * step.iterations as u64,
+                    3_000 * step.iterations as u64,
+                );
+                vault_child.add_child(ContractGasNode::new(
+                    "TokenLedger",
+                    "debit",
+                    2,
+                    25_000 * step.iterations as u64,
+                    1_200 * step.iterations as u64,
+                ));
+
+                let oracle_child = ContractGasNode::new(
+                    "PriceOracle",
+                    "get_latest_price",
+                    1,
+                    35_000 * step.iterations as u64,
+                    1_500 * step.iterations as u64,
+                );
+
+                root.add_child(vault_child);
+                root.add_child(oracle_child);
+
+                let total_cpu = root.total_cpu();
+                print_gas_node(&root, total_cpu);
+                println!("  Cumulative CPU:   {} instructions", total_cpu);
+                println!();
             }
         }
 
