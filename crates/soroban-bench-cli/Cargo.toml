@@ -12,7 +12,7 @@ name = "soroban-bench"
 path = "src/main.rs"
 
 [dependencies]
-soroban-bench-core = { path = "../soroban-bench-core" }
+soroban-bench-core = { path = "../soroban-bench-core", version = "0.1.0" }
 clap.workspace = true
 colored.workspace = true
 anyhow.workspace = true
