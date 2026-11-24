@@ -11,12 +11,6 @@ edition = "2021"
 authors = ["Stellar Crucible"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/stellar-crucible/soroban-bench"
-homepage = "https://stellar-crucible.github.io/soroban-bench/"
-documentation = "https://docs.rs/soroban-bench-core"
-readme = "README.md"
-rust-version = "1.85.0"
-keywords = ["stellar", "soroban", "benchmark", "performance", "gas-profiling"]
-categories = ["cryptography::cryptocurrencies", "development-tools"]
 
 [workspace.dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
