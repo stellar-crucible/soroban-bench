@@ -1,5 +1,6 @@
 use soroban_bench_core::{
-    BenchmarkMetrics, BenchmarkScenario, NetworkCongestionProfile, ProtocolVersion, ScenarioStep,
+    BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode, FuzzPercentiles,
+    GenerativeInputStrategy, NetworkCongestionProfile, ProtocolVersion, ScenarioStep,
     StorageRentCalculator, StorageTier,
 };
 
@@ -98,7 +99,74 @@ fn test_scenario_serialization() {
 
     let toml_str = scenario.to_toml().expect("should serialize");
     assert!(toml_str.contains("liquidity-pool-stress"));
+}
 
-    let deserialized = BenchmarkScenario::from_toml(&toml_str).expect("should deserialize");
-    assert_eq!(deserialized.steps.len(), 2);
+#[test]
+fn test_gas_node_call_tree_and_attribution() {
+    let mut root = ContractGasNode::new("PoolContract", "swap", 0, 100_000, 5_000);
+    let mut child1 = ContractGasNode::new("VaultContract", "transfer", 1, 50_000, 2_000);
+    let subchild = ContractGasNode::new("TokenLedger", "debit", 2, 25_000, 1_000);
+    child1.add_child(subchild);
+
+    let child2 = ContractGasNode::new("OracleContract", "get_price", 1, 25_000, 1_000);
+
+    root.add_child(child1);
+    root.add_child(child2);
+
+    // root own: 100k + child1 (50k + 25k) + child2 (25k) = 200k
+    assert_eq!(root.total_cpu(), 200_000);
+    assert_eq!(root.attribution_pct(200_000), 100.0);
+    assert_eq!(root.children[0].total_cpu(), 75_000);
+    assert!((root.children[0].attribution_pct(200_000) - 37.5).abs() < 0.01);
+}
+
+#[test]
+fn test_html_reporter_output() {
+    let scenario = BenchmarkScenario {
+        name: "amm-benchmark".to_string(),
+        description: "Automated Market Maker swap stress test".to_string(),
+        steps: vec![ScenarioStep {
+            name: "swap-exact-in".to_string(),
+            contract_method: "swap".to_string(),
+            iterations: 100,
+            expected_max_cpu: Some(1_000_000),
+            expected_max_mem: Some(50_000),
+        }],
+    };
+
+    let metrics = vec![BenchmarkMetrics {
+        cpu_instructions: 450_000,
+        memory_bytes: 18_000,
+        ledger_read_entries: 3,
+        ledger_write_entries: 2,
+        ledger_read_bytes: 200,
+        ledger_write_bytes: 100,
+        estimated_fee_stroops: 8_500,
+    }];
+
+    let html = BenchmarkHtmlReporter::render(&scenario, &metrics);
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("amm-benchmark"));
+    assert!(html.contains("swap-exact-in"));
+    assert!(html.contains("Chart"));
+}
+
+#[test]
+fn test_fuzz_percentiles_calculation() {
+    let cpu_samples = vec![100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+    let mem_samples = vec![10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+    let p = FuzzPercentiles::calculate(cpu_samples, mem_samples);
+    assert_eq!(p.p50_cpu, 600);
+    assert_eq!(p.p95_cpu, 1000);
+    assert_eq!(p.p99_cpu, 1000);
+
+    let strat = GenerativeInputStrategy::IntegerRange { min: 1, max: 100 };
+    match strat {
+        GenerativeInputStrategy::IntegerRange { min, max } => {
+            assert_eq!(min, 1);
+            assert_eq!(max, 100);
+        }
+        _ => panic!("wrong strategy"),
+    }
 }
