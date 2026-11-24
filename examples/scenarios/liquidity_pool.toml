@@ -1,0 +1,23 @@
+name = "liquidity-pool-stress"
+description = "Simulate heavy swap traffic and liquidity provisioning on Soroban DEX"
+
+[[steps]]
+name = "initialize-pool"
+contract_method = "initialize"
+iterations = 1
+expected_max_cpu = 500000
+expected_max_mem = 30000
+
+[[steps]]
+name = "deposit-liquidity"
+contract_method = "deposit"
+iterations = 50
+expected_max_cpu = 1200000
+expected_max_mem = 80000
+
+[[steps]]
+name = "concurrent-swaps"
+contract_method = "swap"
+iterations = 250
+expected_max_cpu = 2000000
+expected_max_mem = 150000

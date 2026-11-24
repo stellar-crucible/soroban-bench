@@ -1,0 +1,23 @@
+name = "multisig-governance"
+description = "Macro benchmark for M-of-N threshold signatures and proposal execution"
+
+[[steps]]
+name = "create-proposal"
+contract_method = "propose"
+iterations = 10
+expected_max_cpu = 800000
+expected_max_mem = 50000
+
+[[steps]]
+name = "collect-signatures"
+contract_method = "approve"
+iterations = 50
+expected_max_cpu = 1400000
+expected_max_mem = 90000
+
+[[steps]]
+name = "execute-proposal"
+contract_method = "execute"
+iterations = 10
+expected_max_cpu = 1800000
+expected_max_mem = 120000

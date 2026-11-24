@@ -1,0 +1,9 @@
+{
+  "cpu_instructions": 62500000,
+  "memory_bytes": 3000000,
+  "ledger_read_entries": 250,
+  "ledger_write_entries": 125,
+  "ledger_read_bytes": 32000,
+  "ledger_write_bytes": 16000,
+  "estimated_fee_stroops": 1250000
+}
