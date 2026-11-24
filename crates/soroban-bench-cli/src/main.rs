@@ -1,7 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use soroban_bench_core::{BenchmarkMetrics, BenchmarkScenario, StorageRentCalculator, StorageTier};
+use soroban_bench_core::{
+    BenchmarkMetrics, BenchmarkScenario, NetworkCongestionProfile, ProtocolVersion,
+    StorageRentCalculator, StorageTier,
+};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -27,6 +30,20 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
+    /// Simulate scenario execution under network congestion and fee surges
+    Simulate {
+        /// Path to scenario TOML file
+        scenario: PathBuf,
+
+        /// Fee surge multiplier (e.g. 1.0, 5.0, 25.0)
+        #[arg(short, long, default_value_t = 5.0)]
+        multiplier: f64,
+
+        /// Concurrency level (number of parallel synthetic callers)
+        #[arg(short, long, default_value_t = 10)]
+        concurrency: u32,
+    },
+
     /// Calculate storage rent projections and TTL retention fees
     Rent {
         /// Ledger entry size in bytes
@@ -40,6 +57,10 @@ enum Commands {
         /// Target TTL in ledgers
         #[arg(long, default_value_t = 50_000)]
         ttl: u32,
+
+        /// Stellar protocol version (20, 21, or 22)
+        #[arg(long, default_value_t = 21)]
+        protocol: u32,
     },
 
     /// Compare two benchmark JSON metric files to detect gas regressions
@@ -72,15 +93,27 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Rent { bytes, tier, ttl } => {
+        Commands::Rent {
+            bytes,
+            tier,
+            ttl,
+            protocol,
+        } => {
             let storage_tier = match tier.to_lowercase().as_str() {
                 "instance" => StorageTier::Instance,
                 "temporary" => StorageTier::Temporary,
                 _ => StorageTier::Persistent,
             };
 
+            let proto_ver = match protocol {
+                20 => ProtocolVersion::Protocol20,
+                22 => ProtocolVersion::Protocol22,
+                _ => ProtocolVersion::Protocol21,
+            };
+
             let calc = StorageRentCalculator::default();
             let proj = calc.project_rent(bytes, storage_tier, ttl);
+            let restore = calc.project_restoration(bytes, proto_ver);
 
             println!(
                 "{}",
@@ -90,7 +123,7 @@ fn main() -> Result<()> {
             println!("  Storage Tier:        {:?}", proj.tier);
             println!("  Target TTL:          {} ledgers", proj.target_ttl_ledgers);
             println!();
-            println!("  Estimated Rent Costs:");
+            println!("  Estimated Retention Rent:");
             println!(
                 "   • 30 Days:          {} stroops",
                 proj.rent_30_days_stroops.to_string().yellow()
@@ -102,6 +135,24 @@ fn main() -> Result<()> {
             println!(
                 "   • 365 Days:         {} stroops",
                 proj.rent_365_days_stroops.to_string().yellow()
+            );
+            println!();
+            println!(
+                "{}",
+                "=== State Archival Restoration Cost ===".bold().cyan()
+            );
+            println!("  Protocol Version:    {:?}", restore.protocol);
+            println!(
+                "  Base Restore Fee:    {} stroops",
+                restore.base_restore_fee_stroops
+            );
+            println!(
+                "  Byte-Dependent Fee:  {} stroops",
+                restore.byte_fee_stroops
+            );
+            println!(
+                "  Total Restoration:   {} stroops",
+                restore.total_fee_stroops.to_string().green().bold()
             );
         }
 
@@ -126,7 +177,6 @@ fn main() -> Result<()> {
                     step.iterations
                 );
 
-                // Simulated benchmark metric execution
                 let metrics = BenchmarkMetrics {
                     cpu_instructions: 250_000 * step.iterations as u64,
                     memory_bytes: 12_000 * step.iterations as u64,
@@ -156,6 +206,64 @@ fn main() -> Result<()> {
                     "✔ Benchmark results saved to: {}",
                     out_path.display().to_string().bold()
                 );
+            }
+        }
+
+        Commands::Simulate {
+            scenario,
+            multiplier,
+            concurrency,
+        } => {
+            let content = std::fs::read_to_string(&scenario)?;
+            let sc = BenchmarkScenario::from_toml(&content)?;
+
+            let profile = NetworkCongestionProfile {
+                fee_multiplier: multiplier,
+                concurrency_level: concurrency,
+                contention_probability: 0.08,
+            };
+
+            println!(
+                "{}",
+                format!("Simulating Scenario under Load: {}", sc.name)
+                    .bold()
+                    .magenta()
+            );
+            println!("  Fee Surge Multiplier: {:.1}x", profile.fee_multiplier);
+            println!("  Concurrent Callers:   {}", profile.concurrency_level);
+            println!();
+
+            let base_metrics = BenchmarkMetrics {
+                cpu_instructions: 450_000,
+                memory_bytes: 25_000,
+                ledger_read_entries: 4,
+                ledger_write_entries: 2,
+                ledger_read_bytes: 256,
+                ledger_write_bytes: 128,
+                estimated_fee_stroops: 10_000,
+            };
+
+            for step in &sc.steps {
+                let outcome = profile.simulate(&base_metrics, step.iterations);
+                println!("Step `{}`:", step.name.bold());
+                println!("  Total Transactions:       {}", outcome.total_transactions);
+                println!(
+                    "  Successful:               {}",
+                    outcome.successful_transactions.to_string().green()
+                );
+                println!(
+                    "  Contested/Delayed:        {}",
+                    outcome.contested_transactions.to_string().yellow()
+                );
+                println!(
+                    "  Average Surge Fee:        {} stroops",
+                    outcome.average_fee_stroops
+                );
+                println!(
+                    "  Peak Simulated CPU:       {}",
+                    outcome.peak_cpu_instructions
+                );
+                println!();
             }
         }
 
@@ -199,19 +307,27 @@ fn main() -> Result<()> {
             let sc = BenchmarkScenario::from_toml(&content)?;
 
             let mut code = String::new();
-            code.push_str("//! Auto-generated by `soroban-bench export-testkit`\n\n");
+            code.push_str("//! Auto-generated by `soroban-bench export-testkit`\n");
+            code.push_str("//! Verifies budget boundaries in soroban-testkit property tests.\n\n");
             code.push_str("#![cfg(test)]\n\n");
+            code.push_str("use soroban_sdk::Env;\n");
+            code.push_str("use soroban_testkit::budget::BudgetSnapshot;\n\n");
             code.push_str(&format!("// Scenario: {}\n", sc.name));
             code.push_str("#[test]\n");
-            code.push_str("fn test_benchmark_workload() {\n");
-            code.push_str("    let env = soroban_sdk::Env::default();\n");
-            code.push_str("    // Testkit budget diffing assertions\n");
-            code.push_str("    soroban_testkit::budget::reset_budget(&env);\n");
+            code.push_str("fn test_scenario_budget_invariants() {\n");
+            code.push_str("    let env = Env::default();\n");
+            code.push_str("    let snapshot = BudgetSnapshot::take(&env);\n\n");
             for step in &sc.steps {
                 code.push_str(&format!(
-                    "    // Step: {} ({} iters)\n",
-                    step.name, step.iterations
+                    "    // Step: {} ({} iterations on `{}`)\n",
+                    step.name, step.iterations, step.contract_method
                 ));
+                if let Some(max_cpu) = step.expected_max_cpu {
+                    code.push_str(&format!(
+                        "    assert!(snapshot.cpu_instructions() <= {}, \"CPU exceeded for {}\");\n",
+                        max_cpu, step.name
+                    ));
+                }
             }
             code.push_str("}\n");
 

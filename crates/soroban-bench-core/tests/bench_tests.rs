@@ -1,5 +1,6 @@
 use soroban_bench_core::{
-    BenchmarkMetrics, BenchmarkScenario, ScenarioStep, StorageRentCalculator, StorageTier,
+    BenchmarkMetrics, BenchmarkScenario, NetworkCongestionProfile, ProtocolVersion, ScenarioStep,
+    StorageRentCalculator, StorageTier,
 };
 
 #[test]
@@ -41,6 +42,35 @@ fn test_storage_rent_projection() {
     assert!(projection.rent_30_days_stroops > 0);
     assert!(projection.rent_90_days_stroops > projection.rent_30_days_stroops);
     assert!(projection.rent_365_days_stroops > projection.rent_90_days_stroops);
+
+    let restore_v20 = calc.project_restoration(1_024, ProtocolVersion::Protocol20);
+    let restore_v22 = calc.project_restoration(1_024, ProtocolVersion::Protocol22);
+    assert!(restore_v20.total_fee_stroops > restore_v22.total_fee_stroops);
+}
+
+#[test]
+fn test_network_congestion_simulation() {
+    let profile = NetworkCongestionProfile {
+        fee_multiplier: 5.0,
+        concurrency_level: 10,
+        contention_probability: 0.1,
+    };
+
+    let metrics = BenchmarkMetrics {
+        cpu_instructions: 500_000,
+        memory_bytes: 20_000,
+        ledger_read_entries: 2,
+        ledger_write_entries: 1,
+        ledger_read_bytes: 128,
+        ledger_write_bytes: 64,
+        estimated_fee_stroops: 10_000,
+    };
+
+    let outcome = profile.simulate(&metrics, 5);
+    assert_eq!(outcome.total_transactions, 50);
+    assert!(outcome.successful_transactions > 0);
+    assert!(outcome.contested_transactions > 0);
+    assert_eq!(outcome.average_fee_stroops, 50_000);
 }
 
 #[test]
