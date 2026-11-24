@@ -10,7 +10,7 @@ pub mod simulation;
 
 pub use fuzz::{FuzzPercentiles, GenerativeInputStrategy};
 pub use metrics::{BenchmarkMetrics, MetricDiff};
-pub use profiler::ContractGasNode;
+pub use profiler::{ContractGasNode, HotLoopDetector, HotSpot};
 pub use rent::{
     ProtocolVersion, RentCalculation, RestorationEstimate, StorageRentCalculator, StorageTier,
 };

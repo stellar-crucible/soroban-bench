@@ -1,0 +1,24 @@
+# DAO Governance Timelock & Proposal Lifecycle Benchmark
+name = "governance-timelock-lifecycle"
+description = "Simulate proposal creation, quorum voting, timelock queueing, and execution"
+
+[[steps]]
+name = "propose-governance-action"
+contract_method = "create_proposal"
+iterations = 10
+expected_max_cpu = 2500000
+expected_max_mem = 120000
+
+[[steps]]
+name = "cast-quorum-votes"
+contract_method = "cast_vote"
+iterations = 100
+expected_max_cpu = 800000
+expected_max_mem = 40000
+
+[[steps]]
+name = "execute-timelocked-action"
+contract_method = "execute_proposal"
+iterations = 10
+expected_max_cpu = 3000000
+expected_max_mem = 150000
