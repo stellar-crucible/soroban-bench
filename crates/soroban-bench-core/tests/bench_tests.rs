@@ -1,7 +1,7 @@
 use soroban_bench_core::{
-    BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode, FuzzPercentiles,
-    GenerativeInputStrategy, HotLoopDetector, NetworkCongestionProfile, ProtocolVersion,
-    ScenarioStep, StorageRentCalculator, StorageTier,
+    BenchmarkHistoryStore, BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario,
+    ContractGasNode, FuzzPercentiles, GenerativeInputStrategy, HotLoopDetector,
+    NetworkCongestionProfile, ProtocolVersion, ScenarioStep, StorageRentCalculator, StorageTier,
 };
 
 #[test]
@@ -188,4 +188,32 @@ fn test_hot_loop_detector_and_heatmap() {
     let bar = HotLoopDetector::render_heatmap_bar(60.0, 10);
     assert!(bar.contains("60.0%"));
     assert!(bar.contains("█"));
+}
+
+#[test]
+fn test_benchmark_history_store() {
+    let tmp_dir = std::env::temp_dir().join("bench_hist_test.json");
+    let mut store = BenchmarkHistoryStore::default();
+
+    let metrics = vec![BenchmarkMetrics {
+        cpu_instructions: 500_000,
+        memory_bytes: 20_000,
+        ledger_read_entries: 2,
+        ledger_write_entries: 1,
+        ledger_read_bytes: 100,
+        ledger_write_bytes: 50,
+        estimated_fee_stroops: 10_000,
+    }];
+
+    store
+        .record_and_save(&tmp_dir, "test-scenario", "v0.1.0", &metrics)
+        .expect("should save");
+
+    let loaded = BenchmarkHistoryStore::load_or_init(&tmp_dir).expect("should load");
+    let records = loaded.query_scenario("test-scenario");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].git_ref, "v0.1.0");
+    assert_eq!(records[0].total_cpu, 500_000);
+
+    let _ = std::fs::remove_file(tmp_dir);
 }

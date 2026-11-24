@@ -2,8 +2,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use soroban_bench_core::{
-    BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode, HotLoopDetector,
-    NetworkCongestionProfile, ProtocolVersion, StorageRentCalculator, StorageTier,
+    BenchmarkHistoryStore, BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario,
+    ContractGasNode, HotLoopDetector, NetworkCongestionProfile, ProtocolVersion,
+    StorageRentCalculator, StorageTier,
 };
 use std::path::PathBuf;
 
@@ -96,6 +97,17 @@ enum Commands {
         /// Output path for generated test
         #[arg(short, long, default_value = "tests/benchmark_invariant.rs")]
         output: PathBuf,
+    },
+
+    /// View historical performance trend for a scenario
+    History {
+        /// Scenario name to inspect
+        #[arg(default_value = "liquidity-pool-stress")]
+        scenario: String,
+
+        /// Path to historical store file
+        #[arg(long, default_value = ".benchmarks/history.json")]
+        store: PathBuf,
     },
 }
 
@@ -231,6 +243,15 @@ fn main() -> Result<()> {
                 println!();
 
                 all_metrics.push(metrics);
+            }
+
+            if let Ok(mut hist) = BenchmarkHistoryStore::load_or_init(".benchmarks/history.json") {
+                let _ = hist.record_and_save(
+                    ".benchmarks/history.json",
+                    &sc.name,
+                    "HEAD",
+                    &all_metrics,
+                );
             }
 
             if format.to_lowercase() == "html" {
@@ -473,6 +494,42 @@ fn main() -> Result<()> {
                 .green()
                 .bold()
             );
+        }
+
+        Commands::History { scenario, store } => {
+            let hist = BenchmarkHistoryStore::load_or_init(&store)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            let records = hist.query_scenario(&scenario);
+
+            println!(
+                "{}",
+                format!("=== Performance Trend History: `{}` ===", scenario)
+                    .bold()
+                    .cyan()
+            );
+            if records.is_empty() {
+                println!(
+                    "No historical runs recorded for scenario `{}` in `{}`.",
+                    scenario,
+                    store.display()
+                );
+            } else {
+                println!("  Historical runs found: {}\n", records.len());
+                println!(
+                    "  {:<24} {:<12} {:<16} {:<16}",
+                    "TIMESTAMP", "GIT REF", "TOTAL CPU", "EST. FEE"
+                );
+                println!("  {}", "-".repeat(68));
+                for r in records {
+                    println!(
+                        "  {:<24} {:<12} {:<16} {:<16}",
+                        r.timestamp,
+                        r.git_ref,
+                        r.total_cpu,
+                        format!("{} stroops", r.total_fee_stroops)
+                    );
+                }
+            }
         }
     }
 

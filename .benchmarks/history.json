@@ -1,0 +1,41 @@
+{
+  "records": [
+    {
+      "timestamp": "2026-11-24T12:00:00Z",
+      "scenario": "liquidity-pool-stress",
+      "git_ref": "HEAD",
+      "total_cpu": 75000000,
+      "total_memory": 3600000,
+      "total_fee_stroops": 1500000,
+      "step_metrics": [
+        {
+          "cpu_instructions": 6250000,
+          "memory_bytes": 300000,
+          "ledger_read_entries": 25,
+          "ledger_write_entries": 12,
+          "ledger_read_bytes": 3200,
+          "ledger_write_bytes": 1600,
+          "estimated_fee_stroops": 125000
+        },
+        {
+          "cpu_instructions": 62500000,
+          "memory_bytes": 3000000,
+          "ledger_read_entries": 250,
+          "ledger_write_entries": 125,
+          "ledger_read_bytes": 32000,
+          "ledger_write_bytes": 16000,
+          "estimated_fee_stroops": 1250000
+        },
+        {
+          "cpu_instructions": 6250000,
+          "memory_bytes": 300000,
+          "ledger_read_entries": 25,
+          "ledger_write_entries": 12,
+          "ledger_read_bytes": 3200,
+          "ledger_write_bytes": 1600,
+          "estimated_fee_stroops": 125000
+        }
+      ]
+    }
+  ]
+}
