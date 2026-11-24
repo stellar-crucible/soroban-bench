@@ -1,7 +1,7 @@
 use soroban_bench_core::{
     BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode, FuzzPercentiles,
-    GenerativeInputStrategy, NetworkCongestionProfile, ProtocolVersion, ScenarioStep,
-    StorageRentCalculator, StorageTier,
+    GenerativeInputStrategy, HotLoopDetector, NetworkCongestionProfile, ProtocolVersion,
+    ScenarioStep, StorageRentCalculator, StorageTier,
 };
 
 #[test]
@@ -169,4 +169,23 @@ fn test_fuzz_percentiles_calculation() {
         }
         _ => panic!("wrong strategy"),
     }
+}
+
+#[test]
+fn test_hot_loop_detector_and_heatmap() {
+    let mut root = ContractGasNode::new("PoolContract", "rebalance", 0, 600_000, 20_000);
+    let child = ContractGasNode::new("OracleContract", "fetch_twap", 1, 400_000, 10_000);
+    root.add_child(child);
+
+    let detector = HotLoopDetector::new(30.0);
+    let spots = detector.detect_hotspots(&root);
+
+    // root own is 600k / 1M = 60%, child is 400k / 1M = 40% -> both >= 30%
+    assert_eq!(spots.len(), 2);
+    assert_eq!(spots[0].contract_id, "PoolContract");
+    assert!(spots[0].is_hot_loop); // >= 40%
+
+    let bar = HotLoopDetector::render_heatmap_bar(60.0, 10);
+    assert!(bar.contains("60.0%"));
+    assert!(bar.contains("█"));
 }

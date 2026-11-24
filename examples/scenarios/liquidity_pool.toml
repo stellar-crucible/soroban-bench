@@ -1,23 +1,24 @@
+# Automated Market Maker (AMM) Liquidity Stress Benchmark
 name = "liquidity-pool-stress"
-description = "Simulate heavy swap traffic and liquidity provisioning on Soroban DEX"
+description = "Simulate liquidity seeding, high-frequency swaps, and LP withdrawals"
 
 [[steps]]
-name = "initialize-pool"
-contract_method = "initialize"
-iterations = 1
-expected_max_cpu = 500000
-expected_max_mem = 30000
+name = "seed-initial-liquidity"
+contract_method = "deposit_liquidity"
+iterations = 25
+expected_max_cpu = 1800000
+expected_max_mem = 95000
 
 [[steps]]
-name = "deposit-liquidity"
-contract_method = "deposit"
-iterations = 50
-expected_max_cpu = 1200000
-expected_max_mem = 80000
-
-[[steps]]
-name = "concurrent-swaps"
-contract_method = "swap"
+name = "continuous-swaps"
+contract_method = "swap_tokens"
 iterations = 250
-expected_max_cpu = 2000000
-expected_max_mem = 150000
+expected_max_cpu = 1250000
+expected_max_mem = 60000
+
+[[steps]]
+name = "lp-share-withdrawal"
+contract_method = "withdraw_liquidity"
+iterations = 25
+expected_max_cpu = 1600000
+expected_max_mem = 85000

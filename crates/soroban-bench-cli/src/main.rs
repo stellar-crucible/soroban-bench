@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use soroban_bench_core::{
-    BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode,
+    BenchmarkHtmlReporter, BenchmarkMetrics, BenchmarkScenario, ContractGasNode, HotLoopDetector,
     NetworkCongestionProfile, ProtocolVersion, StorageRentCalculator, StorageTier,
 };
 use std::path::PathBuf;
@@ -306,6 +306,34 @@ fn main() -> Result<()> {
                 let total_cpu = root.total_cpu();
                 print_gas_node(&root, total_cpu);
                 println!("  Cumulative CPU:   {} instructions", total_cpu);
+
+                let detector = HotLoopDetector::default();
+                let hotspots = detector.detect_hotspots(&root);
+                if !hotspots.is_empty() {
+                    println!();
+                    println!(
+                        "{}",
+                        "  === Instruction Heatmap & Hot-Loop Analysis ==="
+                            .bold()
+                            .cyan()
+                    );
+                    for spot in hotspots {
+                        let bar = HotLoopDetector::render_heatmap_bar(spot.percentage_of_total, 16);
+                        let alert = if spot.is_hot_loop {
+                            " [HOT LOOP ALERT]".red().bold()
+                        } else {
+                            "".normal()
+                        };
+                        println!(
+                            "    {} {}::{} {} ({} CPU)",
+                            bar.yellow(),
+                            spot.contract_id.bold(),
+                            spot.method.cyan(),
+                            alert,
+                            spot.cpu_instructions
+                        );
+                    }
+                }
                 println!();
             }
         }
